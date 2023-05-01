@@ -1,0 +1,206 @@
+---
+title: "Untitled"
+output:
+  pdf_document: default
+  html_document: default
+  word_document: default
+---
+
+```{r}
+url <- "https://github.com/dataprofessor/data/raw/master/acetylcholinesterase_06_bioactivity_data_3class_pIC50_pubchem_fp.csv"
+download.file(url, destfile = "acetylcholinesterase_06_bioactivity_data_3class_pIC50_pubchem_fp.csv")
+```
+```{r}
+df_Ach <- read.csv("acetylcholinesterase_06_bioactivity_data_3class_pIC50_pubchem_fp.csv")
+
+head(df_Ach)
+
+dim(df_Ach)
+```
+```{r}
+X <- df_Ach[, !(names(df_Ach) %in% c("pIC50"))]
+Y <- df_Ach$pIC50
+```
+
+```{r}
+
+```
+
+
+
+
+
+```{r eval=FALSE, include=FALSE}
+install.packages("caret")
+```
+```{r}
+library(caret)
+
+# Remove low variance features
+nzv <- nearZeroVar(X, saveMetrics = TRUE)
+X <- X[, !nzv$nzv]
+```
+```{r}
+dim(X)
+```
+
+```{r}
+library(caret)
+
+# Set random seed for reproducibility
+set.seed(42)
+
+# Create data partitions
+trainIndex <- createDataPartition(Y, p = 0.8, list = FALSE)
+X_train <- X[trainIndex, ]
+X_test <- X[-trainIndex, ]
+Y_train <- Y[trainIndex]
+Y_test <- Y[-trainIndex]
+```
+
+```{r}
+list.of.packages <- c("nnls", "quadprog", "SuperLearner", "ggplot2", "raster", "sp", "rgdal", "rgeos", "glmnet", "Matrix", "foreach", "KernelKnn", "randomForest")
+new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages, repos = "http://cran.us.r-project.org")
+
+invisible(lapply(list.of.packages, library, character.only = TRUE))
+```
+
+
+
+```{r}
+mtry = create.Learner("SL.randomForest", tune = list(mtry = c(2,3)), name_prefix="mtry")
+sl_libraries <- mtry$names
+sl_mtry <- SuperLearner(Y = Y_train,
+                        X = X_train, 
+                        family = gaussian(),
+                        SL.library = sl_libraries, 
+                        cvControl = list(V=5))
+sl_mtry
+```
+Predicted values
+
+```{r}
+pred <- predict(sl_mtry, X_test, onlySL = T)
+```
+
+
+
+```{r}
+cv_sl_2 = CV.SuperLearner(Y = Y_train, 
+                    X = X_train, family = gaussian(), SL.library = c("SL.lm", "SL.kernelKnn"), 
+                    cvControl = list(V=5))
+summary(cv_sl_2)
+```
+
+
+
+
+```{r}
+plot(cv_sl_2)
+```
+
+```{r}
+ggplot(data.frame(Y_test, pred$pred), aes(pred$pred , Y_test)) + geom_point() + geom_abline(slope=1, intercept=0)
+```
+
+```{r}
+mse = mean((Y_test-pred$pred)^2)
+print(paste("Mean squared error:", round(mse, digits=4)))
+```
+
+```{r}
+print(paste("Correlation:", round(cor(Y_test,pred$pred), digits=4)))
+```
+
+
+
+
+
+
+
+
+```{r}
+library(caret)
+
+# Define your SuperLearner object
+sl_libraries <- c("SL.glm", "SL.randomForest", "SL.knn")
+sl_mtry1 <- SuperLearner(Y = Y_train, X = X_train, family = gaussian(),
+                        SL.library = sl_libraries, cvControl = list(V = 5))
+
+
+
+```
+
+
+
+```{r}
+sl_mtry1
+```
+```{r}
+summary(sl_mtry1)
+```
+
+```{r}
+pred1 <- predict(sl_mtry1, X_test, onlySL = T)
+```
+```{r}
+ggplot(data.frame(Y_test, pred1$pred), aes(pred1$pred , Y_test)) + geom_point() + geom_abline(slope=1, intercept=0)
+```
+
+```{r}
+print(paste("Correlation:", round(cor(Y_test,pred1$pred), digits=4)))
+```
+```{r}
+ggplot(data.frame(Y_test, pred1$pred), aes(pred1$pred, Y_test)) + 
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, color = "red") +
+  labs(x = "Experimental pIC50", y = "Predicted pIC50")
+
+```
+
+
+```{r}
+importances <- c(251.06030, 192.32849, 158.69406, 158.42195, 154.25947,
+                 110.67713, 108.31098, 107.41293, 98.17413, 97.12171,
+                 92.67365, 92.42779, 86.46519, 83.93010, 81.44788,
+                 81.11657, 79.32465, 76.00375, 73.36621, 72.87880)
+names(importances) <- c("PubchemFP3", "PubchemFP528", "PubchemFP559", "PubchemFP821", "PubchemFP601",
+                        "PubchemFP758", "PubchemFP335", "PubchemFP308", "PubchemFP813", "PubchemFP750",
+                        "PubchemFP193", "PubchemFP493", "PubchemFP621", "PubchemFP391", "PubchemFP180",
+                        "PubchemFP672", "PubchemFP258", "PubchemFP623", "PubchemFP261", "PubchemFP688")
+
+barplot(importances, horiz=TRUE, las=1, main="Feature Importances")
+```
+
+```{r}
+# Set the colors for the bars
+#bar_colors <- rainbow(length(importances))
+
+# Create the histogram
+par(mar=c(10, 5, 4, 2))
+barplot(importances, col= "#50C878", xlab="", ylab="Importance", las=2, cex.names=0.8)
+mtext("Feature", side = 1, line = 6, cex = 0.9)
+title("Top20 Molecular Descriptors")
+```
+```{r}
+# Compute RMSE for a set of predicted and true values
+rmse <- function(pred, true) {
+  sqrt(mean((pred - true)^2))
+}
+
+rmse_val <- rmse(pred1$pred, Y_test)
+print(paste0("RMSE = ", rmse_val))
+
+```
+```{r}
+mse1 = mean((Y_test-pred1$pred)^2)
+print(paste("Mean squared error:", round(mse1, digits=4)))
+```
+
+
+
+
+
+
+```{r}
